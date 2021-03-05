@@ -4,66 +4,129 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Splash.Generator
+namespace BootScreenUtils
 {
-    class Program
+    static class Program
     {
-        private const string SPLASH_IMG = "splash.img";
-        private const string SPLASH_NEW_IMG = "splash_new.img";
+        const string COMMAND_UNPACK = "unpack";
+        const string COMMAND_PATCH = "patch";
+        //const string COMMAND_MAKE = "make";
 
         static async Task Main(string[] args)
         {
-            //Console.WriteLine("Splash Generator");
-            // 换了个更大的Logo
-            Console.WriteLine("=================================================");
-            Console.WriteLine(" ╔═╗┌─┐┬  ┌─┐┌─┐┬ ┬  ╔═╗┌─┐┌┐┌┌─┐┬─┐┌─┐┌┬┐┌─┐┬─┐ ");
-            Console.WriteLine(" ╚═╗├─┘│  ├─┤└─┐├─┤  ║ ╦├┤ │││├┤ ├┬┘├─┤ │ │ │├┬┘ ");
-            Console.WriteLine(" ╚═╝┴  ┴─┘┴ ┴└─┘┴ ┴  ╚═╝└─┘┘└┘└─┘┴└─┴ ┴ ┴ └─┘┴└─ ");
-            Console.WriteLine("=================================================");
-            Console.WriteLine(" Version 1.0.0 ");
-            Console.WriteLine(" Coder by frg2089.");
-            Console.WriteLine(" Open Source Under MIT License.");
-            Console.WriteLine("=================================================");
-
-            var dir = new DirectoryInfo(// 获取工作目录
-                args.Length > 0
-                    ? args[0]
-                    : Environment.CurrentDirectory
-            );
-            
-            var baseFile = new FileInfo(Path.Combine(Environment.CurrentDirectory, SPLASH_IMG));
-            var newFile = new FileInfo(Path.Combine(Environment.CurrentDirectory, SPLASH_NEW_IMG));
-            if(!baseFile.Exists){// 找不到splash.img文件
-                Console.Error.WriteLine("ERROR: Cannot find File \"{0}\"", SPLASH_IMG);
-                return;// 结束程序
-            }
-            if(newFile.Exists) newFile.Delete();// 删除已存在文件
-            baseFile.CopyTo(SPLASH_NEW_IMG);// 拷贝文件
-
-            var files = dir.GetFiles("*.bmp");
-            var enters = new Dictionary<int,FileInfo>();
-            foreach (var file in files)
+            if (args.Length < 1)
             {
-                try
-                {
-                    var offset = Convert.ToInt32(file.Name.Replace(file.Extension, string.Empty), 16);
-                    Console.WriteLine("Find File:{0}", file.Name.PadLeft(12));
-                    enters.Add(offset, file);
-                }catch(FormatException)// 无法转换为整数
-                {
-                    continue;// 跳过这个文件
-                }
+                Console.Error.PrintHelp();
+                return;
             }
-            Console.WriteLine();
-            Console.WriteLine("Working...");
-            await using var stream = newFile.OpenWrite();
-            foreach (var enter in enters)
+            Console.Out.PrintLogo();
+            switch (args[0].ToLower())
             {
-                Console.WriteLine("Write File:{1} to Offset:0x{0}", enter.Key.ToString("x").PadLeft(8, '0'), enter.Value.Name.PadLeft(12).PadRight(14));
-                stream.Seek(enter.Key, SeekOrigin.Begin);
-                await using var imgStream = enter.Value.OpenRead();
-                await imgStream.CopyToAsync(stream);
+                case COMMAND_UNPACK:
+                    if (args.Length > 2)
+                    {
+                        int bufferSize = args.Length > 3 && int.TryParse(args[3], out var tmp) ? tmp : 1024 * 1024 * 8;
+
+                        await SplashUtils.UnpackBitmapFromImage(args[1], args[2], bufferSize).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Argument Error");
+                        Helper.PrintUnpack(Console.Error);
+                    }
+                    break;
+                case COMMAND_PATCH:
+                    if (args.Length > 2)
+                    {
+                        await SplashUtils.PatchImage(args[1], args[2], args.Length > 3 ? args[3] : default).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Argument Error");
+                        Helper.PrintPatch(Console.Error);
+                    }
+                    break;
+                // case COMMAND_MAKE:
+                //     if (args.Length > 3)
+                //     {
+                //         PackageUtils.MakePackage(args[1], args[2], args[3]);
+                //     }
+                //     else
+                //     {
+                //         Helper.PrintPatch(Console.Error);
+                //     }
+                //     break;
+                default:
+                    Console.Error.WriteLine("Command Error");
+                    Console.Error.PrintHelp();
+                    break;
             }
+        }
+        static void PrintLogo(this TextWriter textWriter)
+        {
+            // Logo要大
+            textWriter.WriteLine("<===================================================>");
+            textWriter.WriteLine();
+            textWriter.WriteLine(" ██████╗  ██████╗  ██████╗ ████████╗");
+            textWriter.WriteLine(" ██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝");
+            textWriter.WriteLine(" ██████╔╝██║   ██║██║   ██║   ██║");
+            textWriter.WriteLine(" ██╔══██╗██║   ██║██║   ██║   ██║");
+            textWriter.WriteLine(" ██████╔╝╚██████╔╝╚██████╔╝   ██║");
+            textWriter.WriteLine(" ╚═════╝  ╚═════╝  ╚═════╝    ╚═╝");
+            textWriter.WriteLine();
+            textWriter.WriteLine(" ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗");
+            textWriter.WriteLine(" ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║");
+            textWriter.WriteLine(" ███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║");
+            textWriter.WriteLine(" ╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║");
+            textWriter.WriteLine(" ███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║");
+            textWriter.WriteLine(" ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝");
+            textWriter.WriteLine();
+            textWriter.WriteLine(" ██╗   ██╗████████╗██╗██╗     ███████╗");
+            textWriter.WriteLine(" ██║   ██║╚══██╔══╝██║██║     ██╔════╝");
+            textWriter.WriteLine(" ██║   ██║   ██║   ██║██║     ███████╗");
+            textWriter.WriteLine(" ██║   ██║   ██║   ██║██║     ╚════██║");
+            textWriter.WriteLine(" ╚██████╔╝   ██║   ██║███████╗███████║");
+            textWriter.WriteLine("  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝");
+            textWriter.WriteLine();
+            textWriter.WriteLine("<===================================================>");
+            textWriter.WriteLine("  Version 1.0.1");
+            textWriter.WriteLine("  Copyright (C) 2021 frg2089.");
+            textWriter.WriteLine("  Open Source Under MIT License.");
+            textWriter.WriteLine("<===================================================>");
+        }
+
+        static void PrintHelp(this TextWriter textWriter)
+        {
+            Helper.PrintUnpack(textWriter);
+            Helper.PrintPatch(textWriter);
+            //Helper.PrintMake(textWriter);
+        }
+        static class Helper
+        {
+            public static void PrintUnpack(TextWriter textWriter)
+            {
+                textWriter.WriteLine();
+                textWriter.WriteLine($"    {COMMAND_UNPACK,-32} : Get All Bitmaps from splash.img");
+                textWriter.WriteLine($"    {"       <splash.img>",-32} : splash.img file path");
+                textWriter.WriteLine($"    {"       <out bitmaps folder>",-32} : Output Folder Path");
+                textWriter.WriteLine($"    {"       [<buffer size>]",-32} : Buffer Size (default = 268,435,456)");
+            }
+            public static void PrintPatch(TextWriter textWriter)
+            {
+                textWriter.WriteLine();
+                textWriter.WriteLine($"    {COMMAND_PATCH,-32} : Patch All Bitmaps to splash.img");
+                textWriter.WriteLine($"    {"      <splash.img>",-32} : Source splash.img path");
+                textWriter.WriteLine($"    {"      <bitmaps folder>",-32} : Bitmaps folder");
+                textWriter.WriteLine($"    {"      [<new splash.img>] ",-32} : New splash.img path (default = <splash>.new.img)");
+            }
+            // public static void PrintMake(TextWriter textWriter)
+            // {
+            //     textWriter.WriteLine();
+            //     textWriter.WriteLine($"    {COMMAND_MAKE,-32} ");
+            //     textWriter.WriteLine($"    {"      <splash.img>",-32} ");
+            //     textWriter.WriteLine($"    {"      <animation.zip>",-32} ");
+            //     textWriter.WriteLine($"    {"      <output.zip> ",-32} ");
+            // }
         }
     }
 }
